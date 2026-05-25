@@ -2,133 +2,167 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data_loader import load_macro, load_sectors, load_regions
-from optimization import predict_by_scenario, allocate_budget, compare_scenarios
-from modules import topsis_digital_readiness, simulate_labor_displacement, assess_risk
 
-st.set_page_config(page_title="AIDEOM-VN Dashboard", layout="wide")
+# Import 5 module độc lập
+from m1_economic_forecast import EconomicForecaster
+from m2_digital_readiness import DigitalReadinessEvaluator
+from m3_allocation_optimization import ResourceOptimizer
+from m4_labor_simulation import LaborSimulator
+from m5_risk_assessment import RiskAssessor
 
-SCENARIOS = {
-    "S1. Truyền thống":    [0.70, 0.10, 0.10, 0.10],
-    "S2. Số hóa nhanh":    [0.25, 0.45, 0.15, 0.15],
-    "S3. AI dẫn dắt":      [0.20, 0.20, 0.45, 0.15],
-    "S4. Bao trùm số":     [0.30, 0.20, 0.10, 0.40],
-    "S5. Tối ưu cân bằng": [0.40, 0.25, 0.15, 0.20]
+st.set_page_config(page_title="AIDEOM-VN Dashboard", page_icon="📈", layout="wide")
+
+# Custom CSS để làm cho các thẻ metric trông giống card (hộp) hơn
+st.markdown("""
+<style>
+div[data-testid="metric-container"] {
+    background-color: #f0f2f6;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
 }
+</style>
+""", unsafe_allow_html=True)
 
-macro_df   = load_macro()
-sectors_df = load_sectors()
-regions_df = load_regions()
+st.title("Hệ thống Hỗ trợ Ra quyết định AIDEOM-VN 🚀")
+st.markdown("Dashboard mô phỏng các kịch bản chính sách phát triển kinh tế vĩ mô tích hợp AI.")
 
-st.sidebar.title("🛠️ Cấu hình Kịch bản")
-selected_scenario = st.sidebar.selectbox("Chọn kịch bản phân bổ:", list(SCENARIOS.keys()))
-total_budget = st.sidebar.slider("Ngân sách (Nghìn tỷ VND):", min_value=10000, max_value=150000, value=80000, step=5000)
-show_opt = st.sidebar.checkbox("Hiện kịch bản tối ưu LP trên biểu đồ", value=True)
+# Khởi tạo các module
+m1 = EconomicForecaster()
+m2 = DigitalReadinessEvaluator()
+m3 = ResourceOptimizer()
+m4 = LaborSimulator()
+m5 = RiskAssessor()
 
-st.title("📊 AIDEOM-VN: Mô Hình Ra Quyết Định Kinh Tế 2026-2030")
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("⚙️ Cài đặt Kịch bản")
+    scenario_dict = {
+        "S1 - Truyền thống": "S1",
+        "S2 - Số hóa nhanh": "S2",
+        "S3 - AI dẫn dắt": "S3",
+        "S4 - Bao trùm số": "S4",
+        "S5 - Tối ưu cân bằng": "S5"
+    }
+    selected_option = st.selectbox("Chọn kịch bản mô phỏng:", list(scenario_dict.keys()))
+    scenario_code = scenario_dict[selected_option]
+    
+    st.markdown("---")
+    st.markdown("**Thông tin thông số:**")
+    st.info(f"Kịch bản hiện tại: **{scenario_code}**\nMô hình sẽ cập nhật các chỉ số dựa trên mức độ đầu tư vào công nghệ lõi và mức độ tự động hóa.")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📈 Tổng quan (M1)", "💰 Phân bổ (M3)", "⚖️ Kịch bản so sánh", "⚠️ Cảnh báo (M5)"])
-
-traj_dict = predict_by_scenario(macro_df, SCENARIOS)
-current_traj = traj_dict[selected_scenario]
-base_gdp = macro_df.iloc[-1]['GDP_trillion_VND']
-target_gdp = current_traj.iloc[-1]['Y_pred']
-cagr_val = ((target_gdp / base_gdp) ** (1/5) - 1) * 100
+# --- MAIN TABS ---
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Tổng quan Kinh tế", "💰 Phân bổ Ngân sách", "📈 So sánh Kịch bản", "⚠️ Cảnh báo Rủi ro"])
 
 with tab1:
-    st.subheader("Dự báo tăng trưởng GDP (Cobb-Douglas)")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("GDP 2025 (Nghìn tỷ)", f"{base_gdp:,.0f} VND")
-    c2.metric(f"GDP 2030 ({selected_scenario})", f"{target_gdp:,.0f} VND")
-    c3.metric("CAGR 2026-2030", f"{cagr_val:.2f}%")
-    c4.metric("TFP Trung bình", f"{macro_df['TFP'].mean():.4f}")
+    st.subheader(f"Chỉ số Vĩ mô - Kịch bản {scenario_code}")
     
-    col_chart1, col_chart2 = st.columns(2)
-    with col_chart1:
-        hist_df = macro_df[['year', 'GDP_trillion_VND']].rename(columns={'GDP_trillion_VND': 'GDP'}).copy()
-        hist_df['Type'] = 'Historical'
-        pred_df = current_traj[['year', 'Y_pred']].rename(columns={'Y_pred': 'GDP'}).copy()
-        pred_df['Type'] = 'Forecast'
-        combined_df = pd.concat([hist_df, pred_df])
-        fig1 = px.line(combined_df, x='year', y='GDP', color='Type', markers=True, title="Lịch sử và Dự báo GDP Việt Nam")
-        st.plotly_chart(fig1, use_container_width=True)
-        
-    with col_chart2:
-        fig_area = px.area(current_traj, x='year', y=['K', 'D', 'AI', 'H'], title="Đóng góp của các thành phần vào cấu trúc tăng trưởng")
-        st.plotly_chart(fig_area, use_container_width=True)
+    # Chạy M1 & M2
+    df_gdp = m1.forecast_gdp(scenario=scenario_code)
+    readiness = m2.evaluate_readiness(scenario=scenario_code)
+    
+    # Layout thẻ (Cards)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("GDP Dự kiến 2030", f"{df_gdp['GDP_Billion_USD'].iloc[-1]:.1f} Tỷ USD", f"+{df_gdp['Growth_Rate'].iloc[-1]:.2f}%")
+    col2.metric("Điểm sẵn sàng số", f"{readiness['Readiness_Score']}/100", "Điểm đánh giá hạ tầng")
+    col3.metric("Tăng trưởng Trung bình", f"{df_gdp['Growth_Rate'].mean():.2f}%", "Giai đoạn 2025-2030")
+    
+    st.markdown("---")
+    
+    # Vẽ biểu đồ Plotly Line chuyên nghiệp
+    fig_gdp = px.line(
+        df_gdp, x='Year', y='GDP_Billion_USD', 
+        markers=True, 
+        title="Dự báo tăng trưởng GDP (2025 - 2030)",
+        labels={'GDP_Billion_USD': 'GDP (Tỷ USD)', 'Year': 'Năm'},
+        color_discrete_sequence=['#1f77b4']
+    )
+    fig_gdp.update_layout(hovermode="x unified", title_x=0.4)
+    st.plotly_chart(fig_gdp, use_container_width=True)
 
 with tab2:
-    st.subheader(f"Cơ cấu Ngân sách Đầu tư: {selected_scenario}")
-    weights = SCENARIOS[selected_scenario]
-    alloc_df = pd.DataFrame({
-        "Hạng mục": ['Hạ tầng (K/I)', 'Chuyển đổi số (D)', 'AI (AI)', 'Nhân lực (H)'],
-        "Ngân sách": [total_budget * w for w in weights]
-    })
+    st.subheader("Tối ưu Phân bổ Nguồn lực")
+    col1, col2 = st.columns([1, 2])
     
-    c_alloc1, c_alloc2 = st.columns(2)
-    with c_alloc1:
-        fig_pie = px.pie(alloc_df, values='Ngân sách', names='Hạng mục', hole=0.4, title="Tỷ trọng phân bổ nguồn lực kịch bản chọn")
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-    with c_alloc2:
-        lp_result = allocate_budget(total_budget)
-        lp_alloc = pd.DataFrame(list(lp_result['allocation'].items()), columns=["Hạng mục", "Ngân sách (LP)"])
-        comp_df = alloc_df.merge(lp_alloc, on="Hạng mục")
-        fig_bar = px.bar(comp_df, x="Hạng mục", y=["Ngân sách", "Ngân sách (LP)"], barmode="group",
-                         title="So sánh Kịch bản chọn vs Kịch bản Tối ưu Tuyến tính LP (CVXPY)")
-        st.plotly_chart(fig_bar, use_container_width=True)
+    with col1:
+        total_budget = st.number_input("Nhập tổng ngân sách đầu tư (Tỷ USD):", value=1000.0, step=100.0)
+        df_alloc = m3.optimize_allocation(total_budget=total_budget, scenario=scenario_code)
+        st.dataframe(df_alloc.style.format({'Allocated_Budget': '{:.1f}', 'Percentage': '{:.1f}%'}), hide_index=True)
+    
+    with col2:
+        # Vẽ biểu đồ Plotly Donut (Bánh khuyết)
+        fig_alloc = px.pie(
+            df_alloc, values='Allocated_Budget', names='Sector', 
+            hole=0.4, title=f"Cơ cấu Ngân sách ({total_budget} Tỷ USD)",
+            color_discrete_sequence=px.colors.sequential.Teal
+        )
+        fig_alloc.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_alloc, use_container_width=True)
 
 with tab3:
-    st.subheader("So sánh và Đánh giá toàn diện các Phương án Chính sách")
-    comp_summary = compare_scenarios(macro_df, SCENARIOS)
+    st.subheader("Bàn làm việc So sánh Đa kịch bản")
+    st.markdown("Đối chiếu trực quan kết quả giữa các hướng tiếp cận chính sách tại mốc **2030**.")
     
-    comp_summary['NetJob (triệu)'] = comp_summary.apply(
-        lambda r: simulate_labor_displacement(sectors_df, [r['K (%)']/100, r['D (%)']/100, r['AI (%)']/100, r['H (%)']/100])['net_job'].sum(),
-        axis=1
-    )
+    comp_data = []
+    for s in ['S1', 'S3', 'S5']:
+        gdp = m1.forecast_gdp(scenario=s)['GDP_Billion_USD'].iloc[-1]
+        unemp = m4.simulate_labor_shift(scenario=s)['Unemployment_Rate_Pct']
+        comp_data.append({"Kịch bản": s, "GDP 2030 (Tỷ USD)": gdp, "Thất nghiệp (%)": unemp})
     
-    st.dataframe(comp_summary.style.highlight_max(subset=['GDP 2030', 'CAGR (%)', 'NetJob (triệu)']))
+    df_comp = pd.DataFrame(comp_data)
     
-    c_comp1, c_comp2 = st.columns(2)
-    with c_comp1:
-        fig_comp_bar = px.bar(comp_summary, x='Kịch bản', y='GDP 2030', color='Kịch bản', title="Dự báo Tổng quy mô GDP năm 2030")
-        st.plotly_chart(fig_comp_bar, use_container_width=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        # Biểu đồ cột so sánh GDP
+        fig_comp_gdp = px.bar(
+            df_comp, x='Kịch bản', y='GDP 2030 (Tỷ USD)',
+            text_auto='.1f', title='So sánh GDP năm 2030',
+            color='Kịch bản', color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        st.plotly_chart(fig_comp_gdp, use_container_width=True)
         
-    with c_comp2:
-        categories = ['K', 'D', 'AI', 'H']
-        fig_radar = go.Figure()
-        for idx, row in comp_summary.iterrows():
-            fig_radar.add_trace(go.Scatterpolar(
-                r=[row['K (%)'], row['D (%)'], row['AI (%)'], row['H (%)']],
-                theta=categories, fill='toself', name=row['Kịch bản']
-            ))
-        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), title="Đồ thị Radar cơ cấu chiến lược đầu tư số")
-        st.plotly_chart(fig_radar, use_container_width=True)
+    with col2:
+        # Biểu đồ cột so sánh Thất nghiệp
+        fig_comp_unemp = px.bar(
+            df_comp, x='Kịch bản', y='Thất nghiệp (%)',
+            text_auto='.1f', title='So sánh Tỷ lệ Thất nghiệp',
+            color='Kịch bản', color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        st.plotly_chart(fig_comp_unemp, use_container_width=True)
 
 with tab4:
-    st.subheader("Báo cáo Giám sát và Cảnh báo rủi ro Hệ thống")
-    risk_df, total_risk = assess_risk(sectors_df, weights)
+    st.subheader("Cảnh báo Hệ thống & Rủi ro")
     
-    c_risk1, c_risk2 = st.columns(2)
-    with c_risk1:
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = total_risk,
-            title = {'text': "Chỉ Số Rủi Ro Tổng Hợp Toàn Hệ Thống"},
-            gauge = {
-                'axis': {'range': [0, 100]},
-                'bar': {'color': "darkred"},
-                'steps': [
-                    {'range': [0, 40], 'color': "lightgreen"},
-                    {'range': [40, 70], 'color': "gold"},
-                    {'range': [70, 100], 'color': "salmon"}
-                ]}
+    labor = m4.simulate_labor_shift(scenario=scenario_code)
+    risks = m5.assess_risks(scenario=scenario_code)
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.error(f"🚨 **Dự báo Thất nghiệp:** {labor['Unemployment_Rate_Pct']}%")
+        st.warning(f"🔄 **Việc làm bị thay thế do AI:** {labor['Jobs_Displaced']:,} người")
+        st.success(f"🌱 **Việc làm công nghệ mới:** {labor['New_Tech_Jobs']:,} người")
+        
+        st.markdown("##### Ma trận Rủi ro Chi tiết")
+        st.write(f"- Rủi ro Nợ công: **{risks['Debt_Risk']}**")
+        st.write(f"- Rủi ro Khí hậu: **{risks['Climate_Risk']}**")
+        st.write(f"- Rủi ro Xã hội: **{risks['Social_Risk']}**")
+
+    with col2:
+        # Vẽ Radar Chart để biểu diễn mức độ rủi ro (Chuyển text thành số)
+        risk_map = {'Thấp': 1, 'Trung bình': 2, 'Cao': 3, 'N/A': 0}
+        risk_values = [risk_map.get(risks['Debt_Risk'], 0), risk_map.get(risks['Climate_Risk'], 0), risk_map.get(risks['Social_Risk'], 0)]
+        categories = ['Nợ công', 'Biến đổi Khí hậu', 'An sinh Xã hội']
+        
+        fig_radar = go.Figure(data=go.Scatterpolar(
+            r=risk_values + [risk_values[0]], # Khép kín mảng
+            theta=categories + [categories[0]],
+            fill='toself',
+            line_color='rgba(255, 99, 71, 0.8)',
+            fillcolor='rgba(255, 99, 71, 0.4)'
         ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-        
-    with c_risk2:
-        heat_data = risk_df[['sector_name_vi', 'automation_risk', 'cyber_risk', 'dependency_risk']].set_index('sector_name_vi')
-        fig_heat = px.imshow(heat_data.T, text_auto=".2f", aspect="auto", title="Ma trận Heatmap phân rã rủi ro theo từng Ngành")
-        st.plotly_chart(fig_heat, use_container_width=True)
-        
-    st.dataframe(risk_df[['sector_name_vi', 'labor_million', 'total_risk_score', 'warning']].sort_values('total_risk_score', ascending=False))
+        fig_radar.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[0, 3], tickvals=[1, 2, 3], ticktext=['Thấp', 'Trung bình', 'Cao'])),
+            showlegend=False,
+            title="Sơ đồ Phân bố Rủi ro"
+        )
+        st.plotly_chart(fig_radar, use_container_width=True)
