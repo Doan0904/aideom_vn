@@ -10,6 +10,9 @@ from m3_allocation_optimization import ResourceOptimizer
 from m4_labor_simulation import LaborSimulator
 from m5_risk_assessment import RiskAssessor
 
+# BỔ SUNG: Import hàm load dữ liệu từ data_loader
+from data_loader import load_macro, load_sectors
+
 st.set_page_config(page_title="AIDEOM-VN Dashboard", page_icon="📈", layout="wide")
 
 # Custom CSS để làm cho các thẻ metric trông giống card (hộp) hơn
@@ -27,12 +30,20 @@ div[data-testid="metric-container"] {
 st.title("Hệ thống Hỗ trợ Ra quyết định AIDEOM-VN 🚀")
 st.markdown("Dashboard mô phỏng các kịch bản chính sách phát triển kinh tế vĩ mô tích hợp AI.")
 
-# Khởi tạo các module
-m1 = EconomicForecaster()
-m2 = DigitalReadinessEvaluator()
-m3 = ResourceOptimizer()
-m4 = LaborSimulator()
-m5 = RiskAssessor()
+# ==========================================
+# CẬP NHẬT MỚI: TẢI DỮ LIỆU VÀ KHỞI TẠO MODULE
+# ==========================================
+# Tải dữ liệu thật (Nếu thiếu file CSV, data_loader sẽ tự động tạo)
+macro_df = load_macro()
+sectors_df = load_sectors()
+
+# Khởi tạo các module và truyền dữ liệu vào
+m1 = EconomicForecaster(macro_df=macro_df)
+m2 = DigitalReadinessEvaluator(sectors_df=sectors_df)
+m3 = ResourceOptimizer() # M3 tự tối ưu dựa trên ngân sách nhập từ UI
+m4 = LaborSimulator(sectors_df=sectors_df)
+m5 = RiskAssessor(sectors_df=sectors_df)
+# ==========================================
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -58,7 +69,7 @@ with tab1:
     st.subheader(f"Chỉ số Vĩ mô - Kịch bản {scenario_code}")
     
     # Chạy M1 & M2
-    df_gdp = m1.forecast_gdp(scenario=scenario_code)
+    df_gdp = m1.forecast_gdp(target_year=2030, scenario=scenario_code)
     readiness = m2.evaluate_readiness(scenario=scenario_code)
     
     # Layout thẻ (Cards)
@@ -73,7 +84,7 @@ with tab1:
     fig_gdp = px.line(
         df_gdp, x='Year', y='GDP_Billion_USD', 
         markers=True, 
-        title="Dự báo tăng trưởng GDP (2025 - 2030)",
+        title="Dự báo quỹ đạo tăng trưởng GDP (2025 - 2030)",
         labels={'GDP_Billion_USD': 'GDP (Tỷ USD)', 'Year': 'Năm'},
         color_discrete_sequence=['#1f77b4']
     )
@@ -105,8 +116,8 @@ with tab3:
     
     comp_data = []
     for s in ['S1', 'S3', 'S5']:
-        gdp = m1.forecast_gdp(scenario=s)['GDP_Billion_USD'].iloc[-1]
-        unemp = m4.simulate_labor_shift(scenario=s)['Unemployment_Rate_Pct']
+        gdp = m1.forecast_gdp(target_year=2030, scenario=s)['GDP_Billion_USD'].iloc[-1]
+        unemp = m4.simulate_labor_shift(target_year=2030, scenario=s)['Unemployment_Rate_Pct']
         comp_data.append({"Kịch bản": s, "GDP 2030 (Tỷ USD)": gdp, "Thất nghiệp (%)": unemp})
     
     df_comp = pd.DataFrame(comp_data)
@@ -133,7 +144,7 @@ with tab3:
 with tab4:
     st.subheader("Cảnh báo Hệ thống & Rủi ro")
     
-    labor = m4.simulate_labor_shift(scenario=scenario_code)
+    labor = m4.simulate_labor_shift(target_year=2030, scenario=scenario_code)
     risks = m5.assess_risks(scenario=scenario_code)
     
     col1, col2 = st.columns([1, 1])

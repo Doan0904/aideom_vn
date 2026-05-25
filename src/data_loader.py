@@ -26,7 +26,7 @@ def generate_synthetic_data():
 
     # 2. Sectors data
     sectors_data = {
-        'sector_name_vi': [
+        'sector': [
             'Nông nghiệp', 'Công nghiệp chế biến', 'Khai khoáng', 'Xây dựng', 
             'Bán buôn bán lẻ', 'Vận tải kho bãi', 'Tài chính ngân hàng', 
             'CNTT & Truyền thông', 'Giáo dục', 'Y tế'
@@ -79,7 +79,7 @@ def load_sectors() -> pd.DataFrame:
     if file_path.exists():
         df = pd.read_csv(file_path)
         try:
-            validate_dataframe(df, ['sector_name_vi', 'labor_million', 'automation_risk_pct', 'ai_readiness_0_100'])
+            validate_dataframe(df, ['sector', 'labor_million', 'automation_risk_pct', 'ai_readiness_0_100'])
         except ValueError:
             generate_synthetic_data()
     else:
