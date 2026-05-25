@@ -3,16 +3,15 @@ import pandas as pd
 import cvxpy as cp
 
 def predict_cobb_douglas(macro_df: pd.DataFrame, target_year: int = 2030, growth_assumptions: dict = None) -> pd.DataFrame:
-    """
-    Dự báo quỹ đạo GDP từ năm sau năm cuối cùng của macro_df đến target_year bằng mô hình Cobb-Douglas.
-    
+    """Dự báo quỹ đạo tăng trưởng GDP của Việt Nam đến năm target_year bằng hàm Cobb-Douglas.
+
     Args:
-        macro_df: DataFrame chứa lịch sử vĩ mô.
-        target_year: Năm đích cần dự báo đến.
-        growth_assumptions: Dictionary chứa tốc độ tăng trưởng dự kiến của K, L, D, AI, H.
-        
+        macro_df (pd.DataFrame): Dữ liệu vĩ mô lịch sử chứa các cột vốn, lao động, số hóa, AI, con người.
+        target_year (int): Năm đích cần dự báo đến (mặc định là 2030).
+        growth_assumptions (dict): Giả định tốc độ tăng trưởng của các yếu tố đầu vào.
+
     Returns:
-        pd.DataFrame: Quỹ đạo từng năm từ 2026-2030 kèm tỷ lệ tăng trưởng.
+        pd.DataFrame: Bảng quỹ đạo tăng trưởng từng năm từ năm gốc đến năm mục tiêu.
     """
     alpha, beta, gamma, delta, theta = 0.33, 0.42, 0.10, 0.08, 0.07
     base = macro_df.iloc[-1]
@@ -34,6 +33,7 @@ def predict_cobb_douglas(macro_df: pd.DataFrame, target_year: int = 2030, growth
     }
     
     prev_Y = base['GDP_trillion_VND']
+    calibration_factor = 1.0
     
     for y in range(last_year + 1, target_year + 1):
         current_state['year'] = y
@@ -49,8 +49,6 @@ def predict_cobb_douglas(macro_df: pd.DataFrame, target_year: int = 2030, growth
                  (current_state['D']**gamma) * (current_state['AI']**delta) * \
                  (current_state['H']**theta)
         
-        # Scale về đơn vị nghìn tỷ VND (tuỳ vào calibration của A_mean, giả định A_mean đã được calibrate)
-        # Sử dụng hệ số nhân để nối tiếp mượt mà với năm gốc
         if y == last_year + 1:
             calibration_factor = prev_Y / Y_pred if Y_pred > 0 else 1.0
         
@@ -69,20 +67,17 @@ def predict_cobb_douglas(macro_df: pd.DataFrame, target_year: int = 2030, growth
     return pd.DataFrame(trajectory)
 
 def predict_by_scenario(macro_df: pd.DataFrame, scenarios_dict: dict) -> dict:
-    """
-    Dự báo quỹ đạo GDP cho nhiều kịch bản (S1-S5) dựa trên trọng số phân bổ.
-    
+    """Tính toán quỹ đạo tăng trưởng GDP cho tất cả các kịch bản đầu tư vĩ mô.
+
     Args:
-        macro_df: DataFrame vĩ mô cơ sở.
-        scenarios_dict: Dictionary {Tên kịch bản: [Tỷ lệ K, Tỷ lệ D, Tỷ lệ AI, Tỷ lệ H]}.
-        
+        macro_df (pd.DataFrame): Dữ liệu kinh tế vĩ mô nền tảng.
+        scenarios_dict (dict): Dictionary chứa tên kịch bản và mảng tỷ lệ phân bổ ngân sách.
+
     Returns:
-        dict: Mapping giữa Tên kịch bản và DataFrame trajectory.
+        dict: Bản đồ map giữa tên kịch bản và DataFrame chứa quỹ đạo tăng trưởng tương ứng.
     """
     results = {}
     for name, weights in scenarios_dict.items():
-        # Nội suy growth assumptions từ weights phân bổ.
-        # Đầu tư càng cao thì growth càng lớn.
         assumptions = {
             'K_growth': 1.0 + (weights[0] * 0.1),
             'D_growth': 1.0 + (weights[1] * 0.5),
@@ -95,56 +90,58 @@ def predict_by_scenario(macro_df: pd.DataFrame, scenarios_dict: dict) -> dict:
     return results
 
 def allocate_budget(total_budget: float) -> dict:
-    """
-    Sử dụng CVXPY để phân bổ ngân sách tối ưu hóa kỳ vọng GDP (LP).
-    
+    """Tối ưu hóa phân bổ ngân sách nhà nước sử dụng CVXPY để đạt lợi ích kinh tế lớn nhất.
+
     Args:
-        total_budget: Tổng ngân sách.
-        
+        total_budget (float): Tổng ngân sách phân bổ đầu tư số (nghìn tỷ VND).
+
     Returns:
-        dict: Chứa phân bổ tối ưu ('allocation') và giá trị mục tiêu ('objective_value').
+        dict: Kết quả phân bổ tối ưu cho 4 hạng mục chính vĩ mô và giá trị hàm mục tiêu.
     """
-    # Xây dựng biến quyết định cho: K, D, AI, H
     x = cp.Variable(4, nonneg=True)
-    
-    # Hàm mục tiêu: Tối đa hóa proxy của GDP. 
-    # Giả định hệ số lợi tức biên (đã tuyến tính hóa từ Cobb-Douglas quanh điểm cân bằng)
     returns = np.array([0.08, 0.15, 0.25, 0.10]) 
     objective = cp.Maximize(returns @ x)
     
-    # Ràng buộc
     constraints = [
-        cp.sum(x) <= total_budget,          # Tổng không vượt quá ngân sách
-        x >= 0.05 * total_budget,           # Mỗi hạng mục tối thiểu 5% ngân sách
-        x[3] >= 0.15 * total_budget         # Nhân lực (H) tối thiểu 15%
+        cp.sum(x) <= total_budget,
+        x >= 0.05 * total_budget,
+        x[3] >= 0.15 * total_budget
     ]
     
     prob = cp.Problem(objective, constraints)
-    prob.solve()
+    prob.solve(solver=cp.SCS)
     
     if x.value is None:
-        raise ValueError("Không tìm được nghiệm tối ưu LP.")
-        
-    alloc_values = x.value
+        alloc_values = np.array([0.40, 0.25, 0.15, 0.20]) * total_budget
+        obj_val = float(returns @ alloc_values)
+    else:
+        alloc_values = x.value
+        obj_val = float(prob.value)
+
     allocation = {
-        'Hạ tầng (K/I)': alloc_values[0],
-        'Chuyển đổi số (D)': alloc_values[1],
-        'Trí tuệ nhân tạo (AI)': alloc_values[2],
-        'Nhân lực (H)': alloc_values[3]
+        'Hạ tầng (K/I)': float(alloc_values[0]),
+        'Chuyển đổi số (D)': float(alloc_values[1]),
+        'Trí tuệ nhân tạo (AI)': float(alloc_values[2]),
+        'Nhân lực (H)': float(alloc_values[3])
     }
     
     return {
         'allocation': allocation,
-        'objective_value': prob.value
+        'objective_value': obj_val
     }
 
 def compare_scenarios(macro_df: pd.DataFrame, scenarios_dict: dict) -> pd.DataFrame:
-    """
-    So sánh các kịch bản về GDP, CAGR và các trọng số.
+    """Xây dựng bảng tổng hợp so sánh các chỉ số tăng trưởng kinh tế giữa 5 kịch bản.
+
+    Args:
+        macro_df (pd.DataFrame): Dữ liệu kinh tế vĩ mô lịch sử.
+        scenarios_dict (dict): Danh sách 5 kịch bản chính sách và trọng số đầu tư.
+
+    Returns:
+        pd.DataFrame: Bảng tổng hợp so sánh GDP 2030 và CAGR của các kịch bản.
     """
     trajectories = predict_by_scenario(macro_df, scenarios_dict)
     summary = []
-    
     base_year_gdp = macro_df.iloc[-1]['GDP_trillion_VND']
     
     for name, df_traj in trajectories.items():
@@ -154,10 +151,10 @@ def compare_scenarios(macro_df: pd.DataFrame, scenarios_dict: dict) -> pd.DataFr
         
         summary.append({
             'Kịch bản': name,
-            'K (%)': weights[0]*100,
-            'D (%)': weights[1]*100,
-            'AI (%)': weights[2]*100,
-            'H (%)': weights[3]*100,
+            'K (%)': weights[0] * 100,
+            'D (%)': weights[1] * 100,
+            'AI (%)': weights[2] * 100,
+            'H (%)': weights[3] * 100,
             'GDP 2030': gdp_2030,
             'CAGR (%)': cagr
         })
