@@ -19,12 +19,13 @@ class EconomicForecaster:
     def forecast_gdp(self, target_year: int = 2030, scenario: str = 'S1') -> pd.DataFrame:
         """Dự báo GDP bằng hàm Cobb-Douglas."""
         # Trọng số phân bổ [K, D, AI, H] cho 5 kịch bản
+        # CODE ĐÚNG CẦN THAY THẾ
         scenario_weights = {
-            'S1': [0.40, 0.25, 0.15, 0.20],
-            'S2': [0.20, 0.40, 0.25, 0.15],
-            'S3': [0.15, 0.25, 0.40, 0.20],
-            'S4': [0.25, 0.25, 0.20, 0.30],
-            'S5': [0.25, 0.25, 0.25, 0.25]
+            'S1': [0.70, 0.10, 0.10, 0.10], # S1: 70% K, 10% mỗi loại D/AI/H
+            'S2': [0.25, 0.45, 0.15, 0.15], # S2: Số hóa nhanh (45% D)
+            'S3': [0.20, 0.20, 0.45, 0.15], # S3: AI dẫn dắt (45% AI)
+            'S4': [0.30, 0.20, 0.10, 0.40], # S4: Bao trùm số (40% H)
+            'S5': [0.25, 0.25, 0.25, 0.25]  # Tối ưu cân bằng (Có thể giữ nguyên hoặc lấy từ M3)
         }
         weights = scenario_weights.get(scenario, scenario_weights['S1'])
         

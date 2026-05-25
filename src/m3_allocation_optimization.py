@@ -17,11 +17,11 @@ class ResourceOptimizer:
         
         # Logic tùy chỉnh theo Kịch bản
         if scenario == 'S3': # AI dẫn dắt
-            constraints.append(x[2] >= 0.35 * total_budget)
+            constraints.append(x[2] >= 0.45 * total_budget)
         elif scenario == 'S4': # Bao trùm
-            constraints.append(x[3] >= 0.25 * total_budget)
+            constraints.append(x[3] >= 0.40 * total_budget)
         else: # Mặc định S1
-            constraints.append(x[3] >= 0.15 * total_budget)
+            constraints.append(x[3] >= 0.10 * total_budget)
             
         prob = cp.Problem(objective, constraints)
         prob.solve(solver=cp.SCS)
