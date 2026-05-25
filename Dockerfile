@@ -1,4 +1,4 @@
-cat > Dockerfile << 'EOF'
+
 FROM python:3.10-slim
 
 WORKDIR /app
@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 8888 8501
 
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
-EOF
+
