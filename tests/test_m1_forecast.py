@@ -4,7 +4,8 @@ from src.m1_economic_forecast import EconomicForecaster
 
 def test_forecast_gdp():
     forecaster = EconomicForecaster()
-    df_res = forecaster.forecast_gdp(start_year=2025, end_year=2030, scenario='S3')
+    # Sửa lại tham số gọi hàm: đổi thành target_year=2030
+    df_res = forecaster.forecast_gdp(target_year=2030, scenario='S3')
     
     assert isinstance(df_res, pd.DataFrame), "Kết quả phải là DataFrame"
     assert len(df_res) == 6, "Phải dự báo đủ 6 năm (2025-2030)"

@@ -1,20 +1,39 @@
-"""
-Module M5: Đánh giá và Cảnh báo rủi ro đa chiều
-Đầu vào: Kết quả từ M1, M3, M4.
-Đầu ra: Cảnh báo nợ công, biến đổi khí hậu, an sinh xã hội.
-"""
+import pandas as pd
 
 class RiskAssessor:
-    def __init__(self):
-        pass
+    def __init__(self, sectors_df: pd.DataFrame = None):
+        """Module đánh giá rủi ro vĩ mô dựa trên phân bổ nguồn lực."""
+        pass 
 
     def assess_risks(self, scenario: str = 'S1') -> dict:
-        """
-        Đánh giá mức độ rủi ro (Thấp, Trung bình, Cao).
-        """
-        risks = {
-            'S1': {'Debt_Risk': 'Thấp', 'Climate_Risk': 'Cao', 'Social_Risk': 'Trung bình'},
-            'S3': {'Debt_Risk': 'Cao', 'Climate_Risk': 'Trung bình', 'Social_Risk': 'Cao'},
-            'S5': {'Debt_Risk': 'Trung bình', 'Climate_Risk': 'Thấp', 'Social_Risk': 'Thấp'}
+        """Tính toán ma trận rủi ro hệ thống dựa trên đánh đổi chính sách."""
+        # Trọng số đầu tư: [Hạ tầng (K), Số hóa (D), AI, Nhân lực (H)]
+        scenario_weights = {
+            'S1': [0.40, 0.25, 0.15, 0.20], # Truyền thống
+            'S2': [0.20, 0.40, 0.25, 0.15], # Số hóa nhanh
+            'S3': [0.15, 0.25, 0.40, 0.20], # AI dẫn dắt
+            'S4': [0.25, 0.25, 0.20, 0.30], # Bao trùm
+            'S5': [0.25, 0.25, 0.25, 0.25]  # Cân bằng
         }
-        return risks.get(scenario, {'Debt_Risk': 'N/A', 'Climate_Risk': 'N/A', 'Social_Risk': 'N/A'})
+        weights = scenario_weights.get(scenario, scenario_weights['S1'])
+        
+        # 1. Rủi ro nợ công: Phụ thuộc tỷ lệ thuận vào đầu tư Hạ tầng vật lý quy mô lớn
+        debt_risk_val = weights[0] * 100
+        
+        # 2. Rủi ro khí hậu: Hạ tầng làm tăng phát thải, Số hóa & AI giúp tối ưu năng lượng
+        climate_risk_val = 20 + (weights[0] * 50) - (weights[1] * 10) - (weights[2] * 20)
+        
+        # 3. Rủi ro xã hội: Thất nghiệp do công nghệ và phân hóa kỹ năng
+        social_risk_val = (weights[1] * 30) + (weights[2] * 60)
+
+        # Hàm phân loại dựa trên phổ điểm đã được tinh chỉnh
+        def classify(score):
+            if score >= 30: return 'Cao'
+            if score >= 20: return 'Trung bình'
+            return 'Thấp'
+
+        return {
+            'Social_Risk': classify(social_risk_val),
+            'Climate_Risk': classify(climate_risk_val),
+            'Debt_Risk': classify(debt_risk_val)
+        }

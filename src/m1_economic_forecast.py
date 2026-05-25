@@ -1,38 +1,84 @@
-"""
-Module M1: Dự báo kinh tế vĩ mô
-Đầu vào: Dữ liệu lịch sử, Kịch bản chính sách (S1-S5)
-Đầu ra: Dự báo GDP, Tốc độ tăng trưởng.
-"""
 import pandas as pd
-import numpy as np
 
 class EconomicForecaster:
-    def __init__(self, data_path: str = None):
-        """Khởi tạo module Dự báo kinh tế."""
-        self.data_path = data_path
+    def __init__(self, macro_df: pd.DataFrame = None):
+        """Khởi tạo với dữ liệu vĩ mô. Nếu không có sẽ tự tạo mock data 2020-2024."""
+        if macro_df is None:
+            self.macro_df = pd.DataFrame({
+                'year': [2020, 2021, 2022, 2023, 2024],
+                'K_capital_trillion': [1000, 1100, 1200, 1300, 1400],
+                'L_labor_million': [54, 54.5, 55, 55.5, 56],
+                'D_digital_index': [10, 12, 15, 20, 25],
+                'AI_index': [2, 3, 5, 8, 12],
+                'H_human_capital': [50, 52, 54, 56, 58],
+                'GDP_trillion_VND': [300, 320, 350, 380, 400] # Quy đổi Tỷ USD trong app.py
+            })
+        else:
+            self.macro_df = macro_df
 
-    def forecast_gdp(self, start_year: int = 2025, end_year: int = 2030, scenario: str = 'S1') -> pd.DataFrame:
-        """
-        Dự báo GDP dựa trên hàm sản xuất (VD: Cobb-Douglas).
+    def forecast_gdp(self, target_year: int = 2030, scenario: str = 'S1') -> pd.DataFrame:
+        """Dự báo GDP bằng hàm Cobb-Douglas."""
+        # Trọng số phân bổ [K, D, AI, H] cho 5 kịch bản
+        scenario_weights = {
+            'S1': [0.40, 0.25, 0.15, 0.20],
+            'S2': [0.20, 0.40, 0.25, 0.15],
+            'S3': [0.15, 0.25, 0.40, 0.20],
+            'S4': [0.25, 0.25, 0.20, 0.30],
+            'S5': [0.25, 0.25, 0.25, 0.25]
+        }
+        weights = scenario_weights.get(scenario, scenario_weights['S1'])
         
-        Args:
-            start_year (int): Năm bắt đầu.
-            end_year (int): Năm kết thúc.
-            scenario (str): Kịch bản mô phỏng.
+        # Thiết lập giả định tăng trưởng dựa trên trọng số đầu tư
+        assumptions = {
+            'K_growth': 1.0 + (weights[0] * 0.1),
+            'D_growth': 1.0 + (weights[1] * 0.5),
+            'AI_growth': 1.0 + (weights[2] * 0.8),
+            'H_growth': 1.0 + (weights[3] * 0.2),
+            'L_growth': 1.01,
+            'A_mean': 0.052, 'A_growth': 1.012
+        }
+
+        alpha, beta, gamma, delta, theta = 0.33, 0.42, 0.10, 0.08, 0.07
+        base = self.macro_df.iloc[-1]
+        last_year = int(base['year'])
+        
+        trajectory = []
+        current_state = {
+            'year': last_year,
+            'K': base['K_capital_trillion'], 'L': base['L_labor_million'],
+            'D': base['D_digital_index'], 'AI': base['AI_index'], 'H': base['H_human_capital'],
+            'A': assumptions['A_mean']
+        }
+        
+        prev_Y = base['GDP_trillion_VND']
+        calibration_factor = 1.0
+        
+        for y in range(last_year + 1, target_year + 1):
+            current_state['year'] = y
+            current_state['K'] *= assumptions['K_growth']
+            current_state['L'] *= assumptions['L_growth']
+            current_state['D'] *= assumptions['D_growth']
+            current_state['AI'] *= assumptions['AI_growth']
+            current_state['H'] *= assumptions['H_growth']
+            current_state['A'] *= assumptions['A_growth']
             
-        Returns:
-            pd.DataFrame: Bảng kết quả dự báo GDP.
-        """
-        years = list(range(start_year, end_year + 1))
-        # Logic giả lập (thay bằng công thức thực tế của bạn)
-        growth_rate = {'S1': 0.05, 'S2': 0.06, 'S3': 0.07, 'S4': 0.065, 'S5': 0.068}.get(scenario, 0.05)
-        
-        base_gdp = 400 # Tỷ USD
-        gdp_values = [base_gdp * ((1 + growth_rate) ** i) for i in range(len(years))]
-        
-        return pd.DataFrame({
-            'Year': years,
-            'Scenario': [scenario] * len(years),
-            'GDP_Billion_USD': gdp_values,
-            'Growth_Rate': [growth_rate * 100] * len(years)
-        })
+            Y_pred = (current_state['A']) * \
+                     (current_state['K']**alpha) * (current_state['L']**beta) * \
+                     (current_state['D']**gamma) * (current_state['AI']**delta) * \
+                     (current_state['H']**theta)
+            
+            if y == last_year + 1:
+                calibration_factor = prev_Y / Y_pred if Y_pred > 0 else 1.0
+            
+            Y_pred_calibrated = Y_pred * calibration_factor
+            growth_rate = (Y_pred_calibrated / prev_Y - 1) * 100
+            
+            trajectory.append({
+                'Year': y,
+                'Scenario': scenario,
+                'GDP_Billion_USD': Y_pred_calibrated, # Map với biến ở app.py
+                'Growth_Rate': growth_rate
+            })
+            prev_Y = Y_pred_calibrated
+            
+        return pd.DataFrame(trajectory)

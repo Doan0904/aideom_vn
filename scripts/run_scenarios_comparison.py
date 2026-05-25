@@ -24,7 +24,7 @@ def main():
     print("Đang chạy mô phỏng tổng hợp năm 2030...")
     
     for s in scenarios:
-        gdp_2030 = m1.forecast_gdp(start_year=2030, end_year=2030, scenario=s)['GDP_Billion_USD'].iloc[0]
+        gdp_2030 = m1.forecast_gdp(target_year=2030, scenario=s)['GDP_Billion_USD'].iloc[-1]
         readiness = m2.evaluate_readiness(target_year=2030, scenario=s)['Readiness_Score']
         labor = m4.simulate_labor_shift(target_year=2030, scenario=s)['Unemployment_Rate_Pct']
         

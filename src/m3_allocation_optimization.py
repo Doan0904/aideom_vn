@@ -1,31 +1,39 @@
-"""
-Module M3: Tối ưu phân bổ nguồn lực (Linear/Integer Programming)
-Đầu vào: Ngân sách, mục tiêu KPI.
-Đầu ra: Phương án phân bổ vốn và nhân lực tối ưu.
-"""
+import numpy as np
 import pandas as pd
+import cvxpy as cp
 
 class ResourceOptimizer:
     def __init__(self):
         pass
 
     def optimize_allocation(self, total_budget: float, scenario: str = 'S1') -> pd.DataFrame:
-        """
-        Tối ưu phân bổ ngân sách cho các ngành/vùng (Dùng Scipy, PuLP hoặc Pyomo).
-        """
-        # Logic giả lập
-        sectors = ['Nông nghiệp', 'Công nghiệp', 'Dịch vụ', 'Công nghệ lõi']
-        if scenario in ['S2', 'S3']:
-            allocations = [0.1, 0.3, 0.2, 0.4] # Ưu tiên công nghệ
-        elif scenario == 'S4':
-            allocations = [0.25, 0.25, 0.3, 0.2] # Bao trùm
-        else:
-            allocations = [0.2, 0.4, 0.3, 0.1] # Truyền thống
-            
-        allocated_funds = [total_budget * a for a in allocations]
+        """Tối ưu hóa phân bổ ngân sách bằng CVXPY."""
+        # Với các kịch bản khác nhau, ta sẽ thiết lập điều kiện ràng buộc khác nhau
+        x = cp.Variable(4, nonneg=True)
+        returns = np.array([0.08, 0.15, 0.25, 0.10]) # [Hạ tầng, Số hóa, AI, Nhân lực]
+        objective = cp.Maximize(returns @ x)
         
+        constraints = [cp.sum(x) <= total_budget, x >= 0.05 * total_budget]
+        
+        # Logic tùy chỉnh theo Kịch bản
+        if scenario == 'S3': # AI dẫn dắt
+            constraints.append(x[2] >= 0.35 * total_budget)
+        elif scenario == 'S4': # Bao trùm
+            constraints.append(x[3] >= 0.25 * total_budget)
+        else: # Mặc định S1
+            constraints.append(x[3] >= 0.15 * total_budget)
+            
+        prob = cp.Problem(objective, constraints)
+        prob.solve(solver=cp.SCS)
+        
+        if x.value is None:
+            alloc_values = np.array([0.40, 0.25, 0.15, 0.20]) * total_budget
+        else:
+            alloc_values = x.value
+
+        sectors = ['Hạ tầng Cơ bản', 'Chuyển đổi số', 'Trí tuệ nhân tạo (AI)', 'Đào tạo Nhân lực']
         return pd.DataFrame({
             'Sector': sectors,
-            'Allocated_Budget': allocated_funds,
-            'Percentage': [a * 100 for a in allocations]
+            'Allocated_Budget': alloc_values,
+            'Percentage': (alloc_values / total_budget) * 100
         })
